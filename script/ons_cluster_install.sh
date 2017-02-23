@@ -18,7 +18,7 @@ if [[ $# -lt 7 ]]; then
 	exit 1
 fi
 
-username="admin"
+username="$"
 passphrase="$" # Command-line passphrase
 capacity="$"
 partitions="$"
@@ -39,7 +39,7 @@ while [[ $# -gt 0 ]]; do
 		username="$2";
 		require_username $username 
 		shift 2;;		
-	-P)
+	-P|--passphrase)
 		passphrase="$2";
 		require_passphrase $passphrase 
 		shift 2;;		
@@ -77,10 +77,13 @@ fi
 passphrase="$passphrase"
 [ -z "$passphrase" ] && security="off" || security="on"
 
-if [ "$security" == "on" ]; then
-	read -p "Enter username ($username): " username_entered; echo
-	[ ! -z "$username_entered" ] && username=$username_entered
-	require_username $username
+if [ "$username" == "$" ]; then
+	username="admin"
+	if [ "$security" == "on" ]; then
+		read -p "Enter username ($username): " username_entered; echo
+		[ ! -z "$username_entered" ] && username=$username_entered
+		require_username $username
+	fi
 fi
 
 admin_node=`echo $NODES | awk '{ print $1 }'`

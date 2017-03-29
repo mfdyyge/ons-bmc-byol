@@ -8,6 +8,7 @@
 
 username="admin"
 passphrase=""
+adminport="5000"
 
 while [[ $# -gt 1 ]]; do
 	case $1 in
@@ -19,6 +20,10 @@ while [[ $# -gt 1 ]]; do
 		username=$2; shift 2;;
 	--passphrase)
 		passphrase=$2; shift 2;;
+	--adminport)
+		adminport="$2"; shift 2;;
+	--store)
+		STORE="$2"; shift 2;;
 	*)
 		shift;;
 	esac
@@ -26,13 +31,14 @@ done
 
 cat $plan
 
-runadmin="java -jar $KVHOME/lib/kvstore.jar runadmin -port 5000 -host `hostname`"
+runadmin="java -jar $KVHOME/lib/kvstore.jar runadmin -port $adminport -host `hostname`"
 
 if [ "$security" == "off" ]; then
+	echo "$runadmin"
 	$runadmin load -file $plan
-	java -jar $KVHOME/lib/kvstore.jar ping -host `hostname` -port 5000
+	java -jar $KVHOME/lib/kvstore.jar ping -host `hostname` -port $adminport
 else
-	runadmin_secure="$runadmin -security $KVROOT/security/client.security"
+	runadmin_secure="$runadmin -security $KVROOT/$STORE/security/client.security"
 	$runadmin_secure load -file $plan
 	pswdconfig="change-policy -params passwordMinLength=6 passwordMinDigit=0 passwordMinLower=0 passwordMinSpecial=0 passwordMinUpper=0"
 	echo -e "$pswdconfig\nexec \"create user $username IDENTIFIED BY '$passphrase' ADMIN\"" | $runadmin_secure > /dev/null 2>&1

@@ -21,6 +21,10 @@ if [ $((capacity)) -eq 0 ]; then
 	capacity=`cat $TMP/fdisk | grep sd[a-e] | wc -l`
 fi
 
+adminport="5000"
+harange="5010,5025"
+servicerange="5030,5045"
+
 while [[ $# -gt 1 ]]; do
 	case $1 in
 	-P)
@@ -31,6 +35,14 @@ while [[ $# -gt 1 ]]; do
 		store_security=$2; shift 2;;
 	--capacity)
 		capacity=$2; shift 2;;
+	--adminport)
+		adminport="$2"; shift 2;;
+	--harange)
+		harange="$2"; shift 2;;
+	--servicerange)
+		servicerange="$2"; shift 2;;
+	-s|--store)
+		STORE="$2"; shift 2;;
 	*)
 		shift;;
 	esac
@@ -48,20 +60,31 @@ if [ -z "$drives" ]; then
 	drives=`cat $TMP/fdisk | grep 'sd[b-e]' | sort | cut -f 2 -d ' ' | sed 's/://g'`
 fi
 
+count=0
+
 for drive in $drives
 do
 	mount_dir=`echo $drive | sed 's/dev/ons/g'`
 	storage_dir="-storagedir $mount_dir"
-	[ -z "$KVDIRS" ] && KVDIRS="$storage_dir" || KVDIRS="$KVDIRS $storage_dir"
+    if [[ $count -lt $capacity ]]; then
+		jdb=`sudo find $mount_dir -name *.jdb`
+		if [ -z "$jdb" ]; then
+			[ -z "$KVDIRS" ] && KVDIRS="$storage_dir" || KVDIRS="$KVDIRS $storage_dir"
+			count=$((count + 1))
+		fi
+	fi
 done
 
 passphrase="$passphrase"
+root="$KVROOT/$STORE"
+
+mkdir -p $root
 
 if [ "$security" == "off" ]; then
-	cmd="java -jar $KVHOME/lib/kvstore.jar makebootconfig -root $KVROOT -port 5000 -host $KVHOST -harange 5010,5025 -servicerange 5030,5045 -store-security none -capacity $KVCAP $KVDIRS"
+	cmd="java -jar $KVHOME/lib/kvstore.jar makebootconfig -root $root -port $adminport -host $KVHOST -harange $harange -servicerange $servicerange -store-security none -capacity $KVCAP $KVDIRS"
 	echo $cmd
 else
-	cmd="java -jar $KVHOME/lib/kvstore.jar makebootconfig -root $KVROOT -port 5000 -host $KVHOST -harange 5010,5025 -servicerange 5030,5045 -store-security $store_security -kspwd $passphrase -capacity $KVCAP $KVDIRS"
+	cmd="java -jar $KVHOME/lib/kvstore.jar makebootconfig -root $root -port $adminport -host $KVHOST -harange $harange -servicerange $servicerange -store-security $store_security -kspwd $passphrase -capacity $KVCAP $KVDIRS"
 fi
 
 $cmd

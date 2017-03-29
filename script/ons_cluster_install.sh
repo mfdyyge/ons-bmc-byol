@@ -23,6 +23,10 @@ passphrase="$" # Command-line passphrase
 capacity="$"
 partitions="$"
 
+adminport="5000"
+harange="5010,5025"
+servicerange="5030,5045"
+
 NODES=""
 
 while [[ $# -gt 0 ]]; do
@@ -35,6 +39,12 @@ while [[ $# -gt 0 ]]; do
 		ZONE="$2"; shift 2;;
 	-s|--store)
 		STORE="$2"; shift 2;;
+	--adminport)
+		adminport="$2"; shift 2;;
+	--harange)
+		harange="$2"; shift 2;;
+	--servicerange)
+		servicerange="$2"; shift 2;;
 	-u|--username)
 		username="$2";
 		require_username $username 
@@ -221,17 +231,18 @@ store_security="configure"
 for node in $NODES
 do
 	$scp_ $DIR/ons_node_makeboot.sh opc@$node:$TMP/
-	makeboot="$TMP/ons_node_makeboot.sh --capacity $capacity --security $security -P $passphrase -store-security $store_security"
+	makeboot="$TMP/ons_node_makeboot.sh --capacity $capacity --security $security -P $passphrase -store-security $store_security --adminport $adminport --harange $harange --servicerange $servicerange --store $STORE"
 	if [ $security == "off" ]; then
 		$ssh_ opc@$node "$makeboot"
 	else
 		if [ $store_security == "configure" ]; then
 			$ssh_ opc@$node "$makeboot"
 			rm -rf $DIR/security
-			$scp_ -r opc@$node:ons/KVROOT/security .
+			$scp_ -r opc@$node:ons/KVROOT/$STORE/security .
 			store_security="enable"
 		else
-			$scp_ -r $DIR/security opc@$node:ons/KVROOT/
+			$ssh_ opc@$node "mkdir -p ons/KVROOT/$STORE"
+			$scp_ -r $DIR/security opc@$node:ons/KVROOT/$STORE/
 			$ssh_ opc@$node "$makeboot"
 		fi
 	fi
@@ -244,7 +255,7 @@ rm -rf $DIR/security
 for node in $NODES
 do
 	$scp_ $DIR/ons_node_start.sh opc@$node:$TMP/
-	$ssh_ opc@$node "$TMP/ons_node_start.sh"
+	$ssh_ opc@$node "$TMP/ons_node_start.sh --store $STORE"
 done
 
 # create deploy plan
@@ -253,13 +264,14 @@ plan="$TMP/plan"
 
 cat > $plan <<EOF
 configure -name $STORE
-plan deploy-zone -name $ZONE -rf 3 -wait
+plan deploy-zone -name "$ZONE" -rf 3 -wait
 EOF
 
 admin_hostname=`$ssh_ opc@$admin_node hostname`
-echo "plan deploy-sn -zn zn1 -host $admin_hostname -port 5000 -wait" >> $plan
+echo "plan deploy-sn -zn zn1 -host $admin_hostname -port $adminport -wait" >> $plan
 
 POOL="$ZONE"Pool
+topo="topo"
 
 cat >> $plan <<EOF
 plan deploy-admin -sn sn1 -wait
@@ -272,7 +284,7 @@ for node in $NODES
 do
 	if [ "$node" != "$admin_node" ]; then
 		host=`$ssh_ opc@$node hostname`
-		echo "plan deploy-sn -zn zn1 -host $host -port 5000 -wait" >> $plan
+		echo "plan deploy-sn -zn zn1 -host $host -port $adminport -wait" >> $plan
 		echo "plan deploy-admin -sn sn$num -wait" >> $plan
 		echo "pool join -name $POOL -sn sn$num" >> $plan
 	fi
@@ -280,14 +292,14 @@ do
 done
 
 cat >> $plan <<EOF
-topology create -name topo -pool $POOL -partitions $partitions
-plan deploy-topology -name topo -wait
+topology create -name $topo -pool $POOL -partitions $partitions
+plan deploy-topology -name $topo -wait
 exit
 EOF
 
 # copy deploy plan to admin node and load it
 
 $scp_ $DIR/ons_plan_load.sh $plan opc@$admin_node:$TMP/
-$ssh_ opc@$admin_node "$TMP/ons_plan_load.sh --plan $plan --security $security --username $username --passphrase $passphrase"
+$ssh_ opc@$admin_node "$TMP/ons_plan_load.sh --plan $plan --store $STORE --adminport $adminport --security $security --username $username --passphrase $passphrase"
 
 exit 0

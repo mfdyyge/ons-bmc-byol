@@ -34,7 +34,6 @@ cat $plan
 runadmin="java -jar $KVHOME/lib/kvstore.jar runadmin -port $adminport -host `hostname`"
 
 if [ "$security" == "off" ]; then
-	echo "$runadmin"
 	$runadmin load -file $plan
 	java -jar $KVHOME/lib/kvstore.jar ping -host `hostname` -port $adminport
 else
